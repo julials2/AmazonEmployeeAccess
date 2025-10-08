@@ -2,9 +2,11 @@ library(tidyverse)
 library(tidymodels)
 library(embed)
 library(ggmosaic)
+library(vroom)
 
-amazon_train <- read_csv("train.csv")
-amazon_test <- read_csv("test.csv")
+amazon_train <- vroom("train.csv") %>% 
+  mutate(ACTION = factor(ACTION))
+amazon_test <- vroom("test.csv") 
 
 #####
 ### EDA
@@ -40,3 +42,30 @@ amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>%
 
 prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
+
+#####
+## Model and predictions
+##### 
+logRegModel <- logistic_reg() %>% #Type of model3
+  set_engine("glm")
+
+## Put into a workflow here
+log_reg_workflow <- workflow() %>% 
+  add_recipe(amazon_recipe) %>% 
+  add_model(logRegModel) %>% 
+  fit(data = amazon_train)
+
+## Make predictions
+amazon_predictions <- predict(log_reg_workflow,
+                              new_data=amazon_test,
+                              type="prob") # "class" or "prob"
+
+## Format predictions
+kaggle_predictions <- amazon_predictions %>% 
+  bind_cols(., amazon_test) %>% 
+  select(id, .pred_1) %>% 
+  rename(ACTION = .pred_1, 
+         Id = id)
+  
+vroom_write(x = kaggle_predictions, file = "./logPredictions.csv", delim = ",")
+  
