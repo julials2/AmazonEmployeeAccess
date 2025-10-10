@@ -37,8 +37,8 @@ ggplot() +
 amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>% 
   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
   step_other(all_factor_predictors(), threshold = .001) %>% 
-  step_dummy(all_factor_predictors()) %>% 
-  step_lencode_mixed(all_factor_predictors(), outcome = vars(ACTION))
+  step_lencode_mixed(all_factor_predictors(), outcome = vars(ACTION)) %>% 
+  step_normalize(all_factor_predictors())
 
 prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
@@ -46,17 +46,52 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## Model and predictions
 ##### 
-logRegModel <- logistic_reg() %>% #Type of model3
+# logistic regression model
+logRegModel <- logistic_reg() %>% #Type of model
   set_engine("glm")
 
+# penalized regression model
+penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>% 
+  set_engine("glmnet")
+
 ## Put into a workflow here
-log_reg_workflow <- workflow() %>% 
+
+## logistic regression
+# log_reg_workflow <- workflow() %>% 
+#   add_recipe(amazon_recipe) %>% 
+#   add_model(logRegModel) %>% 
+#   fit(data = amazon_train)
+
+## penalized logistic regression
+amazon_workflow <- workflow() %>% 
   add_recipe(amazon_recipe) %>% 
-  add_model(logRegModel) %>% 
+  add_model(penLogModel)
+
+## Grid of values to tune over
+tuning_grid <- grid_regular(penalty(), 
+                            mixture(), 
+                            levels = 4)
+
+## Split data for CV
+folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
+
+## Run CV
+CV_results <- amazon_workflow %>% 
+  tune_grid(resamples = folds, 
+            grid = tuning_grid, 
+            metrics = metric_set(roc_auc))
+
+## Find best tuning parameters
+bestTune <- CV_results %>% 
+  select_best(metric="roc_auc")
+
+## Finalize workflow and fit it
+final_wf <- amazon_workflow %>% 
+  finalize_workflow(bestTune) %>% 
   fit(data = amazon_train)
 
 ## Make predictions
-amazon_predictions <- predict(log_reg_workflow,
+amazon_predictions <- predict(final_wf,
                               new_data=amazon_test,
                               type="prob") # "class" or "prob"
 
@@ -67,5 +102,5 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
   
-vroom_write(x = kaggle_predictions, file = "./logPredictions.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./penLogPredictions.csv", delim = ",")
   
