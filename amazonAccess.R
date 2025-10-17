@@ -47,12 +47,19 @@ baked <- bake(prep, new_data = amazon_train)
 ## Model and predictions
 ##### 
 # logistic regression model
-logRegModel <- logistic_reg() %>% #Type of model
-  set_engine("glm")
+# logRegModel <- logistic_reg() %>% #Type of model
+#   set_engine("glm")
 
 # penalized regression model
-penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>% 
-  set_engine("glmnet")
+# penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>% 
+#   set_engine("glmnet")
+
+# random forest
+forest_mod <- rand_forest(mtry = tune(), 
+                          min_n = tune(), 
+                          trees = 500) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
 
 ## Put into a workflow here
 
@@ -63,20 +70,30 @@ penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
 #   fit(data = amazon_train)
 
 ## penalized logistic regression
-amazon_workflow <- workflow() %>% 
+# amazon_workflow <- workflow() %>% 
+#   add_recipe(amazon_recipe) %>% 
+#   add_model(penLogModel)
+
+## random forest
+forest_workflow <- workflow() %>% 
   add_recipe(amazon_recipe) %>% 
-  add_model(penLogModel)
+  add_model(forest_mod)
 
 ## Grid of values to tune over
-tuning_grid <- grid_regular(penalty(), 
-                            mixture(), 
+# tuning_grid <- grid_regular(penalty(), 
+#                             mixture(), 
+#                             levels = 4)
+
+## Grid for forest
+tuning_grid <- grid_regular(mtry(range = c(1, 9)), 
+                            min_n(), 
                             levels = 4)
 
 ## Split data for CV
 folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 
 ## Run CV
-CV_results <- amazon_workflow %>% 
+CV_results <- forest_workflow %>% 
   tune_grid(resamples = folds, 
             grid = tuning_grid, 
             metrics = metric_set(roc_auc))
@@ -86,7 +103,7 @@ bestTune <- CV_results %>%
   select_best(metric="roc_auc")
 
 ## Finalize workflow and fit it
-final_wf <- amazon_workflow %>% 
+final_wf <- forest_workflow %>% 
   finalize_workflow(bestTune) %>% 
   fit(data = amazon_train)
 
@@ -102,5 +119,5 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
   
-vroom_write(x = kaggle_predictions, file = "./penLogPredictions.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./forestPredictions.csv", delim = ",")
   
