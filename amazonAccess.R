@@ -44,24 +44,31 @@ prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
 #####
-## Model and predictions
+## Models
 ##### 
-# logistic regression model
+## logistic regression model
 # logRegModel <- logistic_reg() %>% #Type of model
 #   set_engine("glm")
 
-# penalized regression model
+## penalized regression model
 # penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>% 
 #   set_engine("glmnet")
 
-# random forest
-forest_mod <- rand_forest(mtry = tune(), 
-                          min_n = tune(), 
-                          trees = 500) %>% 
-  set_engine("ranger") %>% 
-  set_mode("classification")
+## random forest
+# forest_mod <- rand_forest(mtry = tune(), 
+#                           min_n = tune(), 
+#                           trees = 500) %>% 
+#   set_engine("ranger") %>% 
+#   set_mode("classification")
 
+## knn model
+knn_model <- nearest_neighbor(neighbors = tune()) %>% 
+  set_mode("classification") %>% 
+  set_engine("kknn")
+
+#####
 ## Put into a workflow here
+#####
 
 ## logistic regression
 # log_reg_workflow <- workflow() %>% 
@@ -75,9 +82,18 @@ forest_mod <- rand_forest(mtry = tune(),
 #   add_model(penLogModel)
 
 ## random forest
-forest_workflow <- workflow() %>% 
+# forest_workflow <- workflow() %>% 
+#   add_recipe(amazon_recipe) %>% 
+#   add_model(forest_mod)
+
+## knn 
+knn_wf <- workflow() %>% 
   add_recipe(amazon_recipe) %>% 
-  add_model(forest_mod)
+  add_model(knn_model)
+
+#####
+## CV
+#####
 
 ## Grid of values to tune over
 # tuning_grid <- grid_regular(penalty(), 
@@ -85,15 +101,19 @@ forest_workflow <- workflow() %>%
 #                             levels = 4)
 
 ## Grid for forest
-tuning_grid <- grid_regular(mtry(range = c(1, 9)), 
-                            min_n(), 
-                            levels = 4)
+# tuning_grid <- grid_regular(mtry(range = c(1, 9)), 
+#                             min_n(), 
+#                             levels = 4)
+
+## Grid for knn
+tuning_grid <- grid_regular(neighbors(), 
+                            levels = 5)
 
 ## Split data for CV
 folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 
 ## Run CV
-CV_results <- forest_workflow %>% 
+CV_results <- knn_wf %>% 
   tune_grid(resamples = folds, 
             grid = tuning_grid, 
             metrics = metric_set(roc_auc))
@@ -102,8 +122,12 @@ CV_results <- forest_workflow %>%
 bestTune <- CV_results %>% 
   select_best(metric="roc_auc")
 
+#####
+## Predictions
+#####
+
 ## Finalize workflow and fit it
-final_wf <- forest_workflow %>% 
+final_wf <- knn_wf %>% 
   finalize_workflow(bestTune) %>% 
   fit(data = amazon_train)
 
@@ -119,5 +143,5 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
   
-vroom_write(x = kaggle_predictions, file = "./forestPredictions.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./knnPredictions.csv", delim = ",")
   
