@@ -4,6 +4,7 @@ library(embed)
 library(ggmosaic)
 library(vroom)
 
+
 amazon_train <- vroom("train.csv") %>% 
   mutate(ACTION = factor(ACTION))
 amazon_test <- vroom("test.csv") 
@@ -62,9 +63,14 @@ baked <- bake(prep, new_data = amazon_train)
 #   set_mode("classification")
 
 ## knn model
-knn_model <- nearest_neighbor(neighbors = tune()) %>% 
+# knn_model <- nearest_neighbor(neighbors = tune()) %>% 
+#   set_mode("classification") %>% 
+#   set_engine("kknn")
+
+## Naive bayes model
+nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>% 
   set_mode("classification") %>% 
-  set_engine("kknn")
+  set_engine("naivebayes")
 
 #####
 ## Put into a workflow here
@@ -87,9 +93,14 @@ knn_model <- nearest_neighbor(neighbors = tune()) %>%
 #   add_model(forest_mod)
 
 ## knn 
-knn_wf <- workflow() %>% 
+# knn_wf <- workflow() %>% 
+#   add_recipe(amazon_recipe) %>% 
+#   add_model(knn_model)
+
+## Naive Bayes workflow
+nb_wf <- workflow() %>% 
   add_recipe(amazon_recipe) %>% 
-  add_model(knn_model)
+  add_model(nb_model)
 
 #####
 ## CV
@@ -106,14 +117,19 @@ knn_wf <- workflow() %>%
 #                             levels = 4)
 
 ## Grid for knn
-tuning_grid <- grid_regular(neighbors(), 
-                            levels = 5)
+# tuning_grid <- grid_regular(neighbors(), 
+#                             levels = 5)
+
+## Grid for naive bayes
+tuning_grid <- grid_regular(Laplace(), 
+                            smoothness(), 
+                            levels = 4)
 
 ## Split data for CV
 folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 
 ## Run CV
-CV_results <- knn_wf %>% 
+CV_results <- nb_wf %>% 
   tune_grid(resamples = folds, 
             grid = tuning_grid, 
             metrics = metric_set(roc_auc))
@@ -127,7 +143,7 @@ bestTune <- CV_results %>%
 #####
 
 ## Finalize workflow and fit it
-final_wf <- knn_wf %>% 
+final_wf <- nb_wf %>% 
   finalize_workflow(bestTune) %>% 
   fit(data = amazon_train)
 
@@ -143,5 +159,5 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
   
-vroom_write(x = kaggle_predictions, file = "./knnPredictions.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./nbPredictions.csv", delim = ",")
   
