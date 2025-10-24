@@ -3,6 +3,11 @@ library(tidymodels)
 library(embed)
 library(ggmosaic)
 library(vroom)
+library(reticulate)
+library(keras)
+py_require("tensorflow")
+py_require_legacy_keras()
+
 
 
 amazon_train <- vroom("train.csv") %>% 
@@ -35,12 +40,21 @@ ggplot() +
 #####
 ### Recipe
 ##### 
-amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>% 
-  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
-  step_other(all_factor_predictors(), threshold = .001) %>% 
-  step_lencode_mixed(all_factor_predictors(), outcome = vars(ACTION)) %>% 
-  step_normalize(all_factor_predictors())
+# amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>% 
+#   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+#   step_other(all_factor_predictors(), threshold = .001) %>% 
+#   step_lencode_mixed(all_factor_predictors(), outcome = vars(ACTION)) %>% 
+#   step_normalize(all_factor_predictors())
 
+## Neural Network Recipe
+amazon_recipe <- recipe(ACTION ~., data = amazon_train) %>% 
+  update_role(MGR_ID, new_role = "id") %>% 
+  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+  step_other(all_factor_predictors(), threshold = .001) %>%
+  step_dummy(all_factor_predictors()) %>%
+  step_normalize(all_factor_predictors()) %>% 
+  step_range(all_numeric_predictors(), min=0, max=1)
+  
 prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
@@ -68,9 +82,15 @@ baked <- bake(prep, new_data = amazon_train)
 #   set_engine("kknn")
 
 ## Naive bayes model
-nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>% 
-  set_mode("classification") %>% 
-  set_engine("naivebayes")
+# nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>% 
+#   set_mode("classification") %>% 
+#   set_engine("naivebayes")
+
+## Neural network model
+nn_model <- mlp(hidden_units = tune(), 
+                epochs = 50) %>% 
+  set_engine("keras") %>% 
+  set_mode("classification")
 
 #####
 ## Put into a workflow here
@@ -98,9 +118,14 @@ nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
 #   add_model(knn_model)
 
 ## Naive Bayes workflow
-nb_wf <- workflow() %>% 
+# nb_wf <- workflow() %>% 
+#   add_recipe(amazon_recipe) %>% 
+#   add_model(nb_model)
+
+## Neural Network workflow
+nn_wf <-workflow() %>% 
   add_recipe(amazon_recipe) %>% 
-  add_model(nb_model)
+  add_model(nn_model)
 
 #####
 ## CV
@@ -121,17 +146,21 @@ nb_wf <- workflow() %>%
 #                             levels = 5)
 
 ## Grid for naive bayes
-tuning_grid <- grid_regular(Laplace(), 
-                            smoothness(), 
-                            levels = 4)
+# tuning_grid <- grid_regular(Laplace(), 
+#                             smoothness(), 
+#                             levels = 4)
+
+## Grid for neural network
+nn_tuneGrid <- grid_regular(hidden_units(range=c(1, 20)), 
+                            levels = 5)
 
 ## Split data for CV
 folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 
 ## Run CV
-CV_results <- nb_wf %>% 
+CV_results <- nn_wf %>% 
   tune_grid(resamples = folds, 
-            grid = tuning_grid, 
+            grid = nn_tuneGrid, 
             metrics = metric_set(roc_auc))
 
 ## Find best tuning parameters
@@ -143,7 +172,7 @@ bestTune <- CV_results %>%
 #####
 
 ## Finalize workflow and fit it
-final_wf <- nb_wf %>% 
+final_wf <- nn_wf %>% 
   finalize_workflow(bestTune) %>% 
   fit(data = amazon_train)
 
@@ -159,5 +188,10 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
   
-vroom_write(x = kaggle_predictions, file = "./nbPredictions.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./nnPredictions.csv", delim = ",")
   
+## Create tuning graphic
+CV_results %>% collect_metrics() %>% 
+  filter(.metric=="roc_auc") %>% 
+  ggplot(aes(x = hidden_units, y = mean)) +
+  geom_line()
