@@ -9,9 +9,9 @@ amazon_train <- vroom("train.csv") %>%
   mutate(ACTION = factor(ACTION))
 amazon_test <- vroom("test.csv") 
 
-#####
+##########
 ### EDA
-#####
+##########
 amazon_train %>% 
   mutate(ROLE_FAMILY = factor(ROLE_FAMILY)) %>% 
   group_by(ROLE_FAMILY) %>% 
@@ -32,9 +32,9 @@ ggplot() +
   geom_col(aes(x = ROLE_DEPTNAME, y = n)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-#####
+###########
 ### Recipe
-##### 
+##########
 # amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>%
 #   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
 #   step_other(all_factor_predictors(), threshold = .001) %>%
@@ -52,20 +52,29 @@ ggplot() +
 #   step_normalize(all_numeric_predictors()) %>%
 #   step_zv(all_predictors()) # remove zero-variance cols
 
-
+#####
+## Balancing Data Recipe
+#####
+amazon_recipe <- recipe(ACTION ~ ., data = amazon_train) %>% 
+  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_smote(all_outcomes(), neighbors = 5) %>% 
+  step_upsample(all_outcomes()) %>% 
+  step_downsample(all_outcomes())
   
 prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
-#####
+##########
 ## Models
-##### 
+##########
 
 #####
 ## logistic regression model
 #####
-# logRegModel <- logistic_reg() %>% #Type of model
-#   set_engine("glm")
+logRegModel <- logistic_reg() %>% #Type of model
+  set_engine("glm")
 
 #####
 ## penalized regression model
@@ -111,9 +120,9 @@ svm_Linear <- svm_linear(cost = 0.0131) %>%
   set_mode("classification") %>%
   set_engine("kernlab")
 
-#####
+##########
 ## Put into a workflow here
-#####
+##########
 #####
 ## logistic regression
 #####
@@ -125,8 +134,8 @@ svm_Linear <- svm_linear(cost = 0.0131) %>%
 #####
 ## penalized logistic regression
 #####
-# amazon_workflow <- workflow() %>% 
-#   add_recipe(amazon_recipe) %>% 
+# pen_workflow <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
 #   add_model(penLogModel)
 
 #####
@@ -146,21 +155,21 @@ svm_Linear <- svm_linear(cost = 0.0131) %>%
 #####
 ## Naive Bayes workflow
 #####
-# nb_wf <- workflow() %>% 
-#   add_recipe(amazon_recipe) %>% 
+# nb_wf <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
 #   add_model(nb_model)
 
 #####
 ## SVM workflows
 #####
-radial_wf <- workflow() %>%
-  add_model(svm_Radial) %>%
-  add_recipe(amazon_recipe) %>%
-  fit(data = amazon_train)
-
 poly_wf <- workflow() %>% 
   add_model(svm_Poly) %>% 
   add_recipe(amazon_recipe) %>% 
+  fit(data = amazon_train)
+
+radial_wf <- workflow() %>%
+  add_model(svm_Radial) %>%
+  add_recipe(amazon_recipe) %>%
   fit(data = amazon_train)
 
 linear_wf <- workflow() %>%
@@ -168,35 +177,35 @@ linear_wf <- workflow() %>%
   add_recipe(amazon_recipe) %>%
   fit(data = amazon_train)
 
-#####
+##########
 ## CV
-#####
+##########
 
 #####
 ## Grid of values to tune over
 #####
-# tuning_grid <- grid_regular(penalty(),
+# tuning_grid_pen <- grid_regular(penalty(),
 #                             mixture(),
 #                             levels = 4)
 
 #####
 ## Grid for forest
 #####
-# tuning_grid <- grid_regular(mtry(range = c(1, 9)),
+# tuning_grid_forest <- grid_regular(mtry(range = c(1, 9)),
 #                             min_n(),
 #                             levels = 4)
 
 #####
 ## Grid for knn
 #####
-# tuning_grid <- grid_regular(neighbors(),
+# tuning_grid_knn <- grid_regular(neighbors(),
 #                             levels = 5)
 
 #####
 ## Grid for naive bayes
 #####
-# tuning_grid <- grid_regular(Laplace(), 
-#                             smoothness(), 
+# tuning_grid_bayes <- grid_regular(Laplace(),
+#                             smoothness(),
 #                             levels = 4)
 
 #####
@@ -221,53 +230,27 @@ linear_wf <- workflow() %>%
 #####
 ## Run CV
 #####
-# CV_results_poly <- tune_grid(
-#             poly_wf,
+# CV_results <- tune_grid(
+#             pen_workflow,
 #             resamples = folds,
-#             grid = tuning_grid_poly,
-#             metrics = metric_set(roc_auc))
-# 
-# CV_results_radial <- tune_grid(
-#             radial_wf, 
-#             resamples = folds,
-#             grid = tuning_grid_radial,
-#             metrics = metric_set(roc_auc))
-# 
-# CV_results_linear <- tune_grid(
-#             linear_wf,
-#             resamples = folds,
-#             grid = tuning_grid_linear,
+#             grid = tuning_grid_pen,
 #             metrics = metric_set(roc_auc))
 
 #####
 ## Find best tuning parameters
 #####
-# bestTune_poly <- CV_results_poly %>%
-#   select_best(metric="roc_auc")
-# 
-# bestTune_radial <- CV_results_radial %>%
-#   select_best(metric="roc_auc")
-# 
-# bestTune_linear <- CV_results_linear %>%
+# bestTune <- CV_results %>%
 #   select_best(metric="roc_auc")
 
-#####
+##########
 ## Predictions
-#####
+##########
 
 #####
 ## Finalize workflow and fit it
 #####
-# final_wf_poly <- reg_workflow %>%
+# final_wf <- reg_workflow %>%
 #   finalize_workflow(bestTune_poly) %>%
-#   fit(data = amazon_train)
-# 
-# final_wf_radial <- reg_workflow %>%
-#   finalize_workflow(bestTune_radial) %>%
-#   fit(data = amazon_train)
-# 
-# final_wf_linear <- reg_workflow %>%
-#   finalize_workflow(bestTune_linear) %>%
 #   fit(data = amazon_train)
 
 #####
@@ -307,9 +290,9 @@ kaggle_predictions_linear <- amazon_predictions_linear %>%
   rename(ACTION = .pred_1, 
          Id = id)
 
-vroom_write(x = kaggle_predictions_poly, file = "./logPredictionsSVMPoly.csv", delim = ",")
-vroom_write(x = kaggle_predictions_radial, file = "./logPredictionsSVMRad.csv", delim = ",")
-vroom_write(x = kaggle_predictions_linear, file = "./logPredictionsSVMLin.csv", delim = ",")
+vroom_write(x = kaggle_predictions_poly, file = "./balancedSVMPoly.csv", delim = ",")
+vroom_write(x = kaggle_predictions_radial, file = "./balancedSVMRad.csv", delim = ",")
+vroom_write(x = kaggle_predictions_linear, file = "./balancedSVMLin.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
