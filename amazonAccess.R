@@ -3,12 +3,7 @@ library(tidymodels)
 library(embed)
 library(ggmosaic)
 library(vroom)
-# library(reticulate)
-# library(keras)
-# py_require("tensorflow")
-# py_require_legacy_keras()
-
-
+library(themis) #up and down sampling
 
 amazon_train <- vroom("train.csv") %>% 
   mutate(ACTION = factor(ACTION))
@@ -40,207 +35,282 @@ ggplot() +
 #####
 ### Recipe
 ##### 
-amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>%
-  step_mutate_at(all_numeric_predictors(), fn = factor) %>%
-  step_other(all_factor_predictors(), threshold = .001) %>%
-  #step_lencode_mixed(all_factor_predictors(), outcome = vars(ACTION)) %>% Target Encoding
-  step_dummy(all_factor_predictors())  %>% 
-  step_normalize(all_factor_predictors()) %>% 
-  step_pca(all_predictors(), threshold = 0.9)
-
-#####
-## Neural Network Recipe
-#####
-# amazon_recipe <- recipe(ACTION ~., data = amazon_train) %>% 
-#   update_role(MGR_ID, new_role = "id") %>% 
+# amazon_recipe <- recipe(ACTION ~., data=amazon_train) %>%
 #   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
 #   step_other(all_factor_predictors(), threshold = .001) %>%
-#   step_dummy(all_factor_predictors()) %>%
+#   #step_lencode_mixed(all_factor_predictors(), outcome = vars(ACTION)) %>% Target Encoding
+#   step_dummy(all_factor_predictors())  %>% 
 #   step_normalize(all_factor_predictors()) %>% 
-#   step_range(all_numeric_predictors(), min=0, max=1)
-#####
+#   step_pca(all_predictors(), threshold = 0.8)
 
+#####
+## SVM Recipe
+#####
+# amazon_recipe <- recipe(ACTION ~ ., data = amazon_train) %>%
+#   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+#   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
+#   step_normalize(all_numeric_predictors()) %>%
+#   step_zv(all_predictors()) # remove zero-variance cols
+
+
+  
 prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
 
 #####
 ## Models
 ##### 
-## logistic regression model
-logRegModel <- logistic_reg() %>% #Type of model
-  set_engine("glm")
 
+#####
+## logistic regression model
+#####
+# logRegModel <- logistic_reg() %>% #Type of model
+#   set_engine("glm")
+
+#####
 ## penalized regression model
+#####
 # penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
 #   set_engine("glmnet")
 
+#####
 ## random forest
-forest_mod <- rand_forest(mtry = tune(),
-                          min_n = tune(),
-                          trees = 500) %>%
-  set_engine("ranger") %>%
-  set_mode("classification")
+#####
+# forest_mod <- rand_forest(mtry = tune(),
+#                           min_n = tune(),
+#                           trees = 500) %>%
+#   set_engine("ranger") %>%
+#   set_mode("classification")
 
+#####
 ## knn model
-knn_model <- nearest_neighbor(neighbors = tune()) %>%
-  set_mode("classification") %>%
-  set_engine("kknn")
+#####
+# knn_model <- nearest_neighbor(neighbors = tune()) %>%
+#   set_mode("classification") %>%
+#   set_engine("kknn")
 
+#####
 ## Naive bayes model
+#####
 # nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
 #   set_mode("classification") %>%
 #   set_engine("naivebayes")
 
-## Neural network model
-# nn_model <- mlp(hidden_units = tune(), 
-#                 epochs = 50) %>% 
-#   set_engine("keras") %>% 
-#   set_mode("classification")
+#####
+## SVM models
+#####
+svm_Radial <- svm_rbf(rbf_sigma = 0.177, cost = 0.00316) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+svm_Poly <- svm_poly(degree = 1, cost = 0.0131) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
+
+svm_Linear <- svm_linear(cost = 0.0131) %>%
+  set_mode("classification") %>%
+  set_engine("kernlab")
 
 #####
 ## Put into a workflow here
 #####
-
+#####
 ## logistic regression
-log_reg_workflow <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(logRegModel) %>%
-  fit(data = amazon_train)
+#####
+# log_reg_workflow <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(logRegModel) %>%
+#   fit(data = amazon_train)
 
+#####
 ## penalized logistic regression
+#####
 # amazon_workflow <- workflow() %>% 
 #   add_recipe(amazon_recipe) %>% 
 #   add_model(penLogModel)
 
+#####
 ## random forest
-forest_workflow <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(forest_mod)
+#####
+# forest_workflow <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(forest_mod)
 
+#####
 ## knn 
-knn_wf <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(knn_model)
+#####
+# knn_wf <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(knn_model)
 
+#####
 ## Naive Bayes workflow
+#####
 # nb_wf <- workflow() %>% 
 #   add_recipe(amazon_recipe) %>% 
 #   add_model(nb_model)
 
-## Neural Network workflow
-# nn_wf <-workflow() %>% 
-#   add_recipe(amazon_recipe) %>% 
-#   add_model(nn_model)
+#####
+## SVM workflows
+#####
+radial_wf <- workflow() %>%
+  add_model(svm_Radial) %>%
+  add_recipe(amazon_recipe) %>%
+  fit(data = amazon_train)
+
+poly_wf <- workflow() %>% 
+  add_model(svm_Poly) %>% 
+  add_recipe(amazon_recipe) %>% 
+  fit(data = amazon_train)
+
+linear_wf <- workflow() %>%
+  add_model(svm_Linear) %>% 
+  add_recipe(amazon_recipe) %>%
+  fit(data = amazon_train)
 
 #####
 ## CV
 #####
 
+#####
 ## Grid of values to tune over
+#####
 # tuning_grid <- grid_regular(penalty(),
 #                             mixture(),
 #                             levels = 4)
 
+#####
 ## Grid for forest
-tuning_grid_forest <- grid_regular(mtry(range = c(1, 9)),
-                            min_n(),
-                            levels = 4)
+#####
+# tuning_grid <- grid_regular(mtry(range = c(1, 9)),
+#                             min_n(),
+#                             levels = 4)
 
+#####
 ## Grid for knn
-tuning_grid_knn <- grid_regular(neighbors(),
-                            levels = 5)
+#####
+# tuning_grid <- grid_regular(neighbors(),
+#                             levels = 5)
 
+#####
 ## Grid for naive bayes
+#####
 # tuning_grid <- grid_regular(Laplace(), 
 #                             smoothness(), 
 #                             levels = 4)
 
-## Grid for neural network
-# nn_tuneGrid <- grid_regular(hidden_units(range=c(1, 20)), 
+#####
+## Grid for SVM
+#####
+# tuning_grid_poly <- grid_regular(degree(), 
+#                             cost(), 
+#                             levels = 5)
+# 
+# tuning_grid_radial <- grid_regular(rbf_sigma(), 
+#                             cost(), 
+#                             levels = 5)
+# 
+# tuning_grid_linear <- grid_regular(cost(), 
 #                             levels = 5)
 
+#####
 ## Split data for CV
-folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
+#####
+# folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 
+#####
 ## Run CV
-# CV_results <- amazon_workflow %>% 
-#   tune_grid(resamples = folds, 
-#             grid = tuning_grid, 
+#####
+# CV_results_poly <- tune_grid(
+#             poly_wf,
+#             resamples = folds,
+#             grid = tuning_grid_poly,
+#             metrics = metric_set(roc_auc))
+# 
+# CV_results_radial <- tune_grid(
+#             radial_wf, 
+#             resamples = folds,
+#             grid = tuning_grid_radial,
+#             metrics = metric_set(roc_auc))
+# 
+# CV_results_linear <- tune_grid(
+#             linear_wf,
+#             resamples = folds,
+#             grid = tuning_grid_linear,
 #             metrics = metric_set(roc_auc))
 
-CV_results_forest <- forest_workflow %>% 
-  tune_grid(resamples = folds, 
-            grid = tuning_grid_forest, 
-            metrics = metric_set(roc_auc))
-
-CV_results_knn <- knn_wf %>% 
-  tune_grid(resamples = folds, 
-            grid = tuning_grid_knn, 
-            metrics = metric_set(roc_auc))
-
+#####
 ## Find best tuning parameters
-# bestTune <- CV_results %>% 
+#####
+# bestTune_poly <- CV_results_poly %>%
 #   select_best(metric="roc_auc")
-
-bestTune_forest <- CV_results_forest %>% 
-  select_best(metric="roc_auc")
-
-bestTune_knn <- CV_results_knn %>% 
-  select_best(metric="roc_auc")
+# 
+# bestTune_radial <- CV_results_radial %>%
+#   select_best(metric="roc_auc")
+# 
+# bestTune_linear <- CV_results_linear %>%
+#   select_best(metric="roc_auc")
 
 #####
 ## Predictions
 #####
 
+#####
 ## Finalize workflow and fit it
-# final_wf <- reg_workflow %>% 
-#   finalize_workflow(bestTune) %>% 
+#####
+# final_wf_poly <- reg_workflow %>%
+#   finalize_workflow(bestTune_poly) %>%
+#   fit(data = amazon_train)
+# 
+# final_wf_radial <- reg_workflow %>%
+#   finalize_workflow(bestTune_radial) %>%
+#   fit(data = amazon_train)
+# 
+# final_wf_linear <- reg_workflow %>%
+#   finalize_workflow(bestTune_linear) %>%
 #   fit(data = amazon_train)
 
-final_wf_forest <- forest_workflow %>% 
-  finalize_workflow(bestTune_forest) %>% 
-  fit(data = amazon_train)
-
-final_wf_knn <- knn_wf %>% 
-  finalize_workflow(bestTune_knn) %>% 
-  fit(data = amazon_train)
-
+#####
 ## Make predictions
-amazon_predictions_log <- predict(log_reg_workflow,
+#####
+amazon_predictions_poly <- predict(poly_wf,
                               new_data=amazon_test,
                               type="prob") # "class" or "prob"
 
-amazon_predictions_forest <- predict(final_wf_forest,
-                                  new_data=amazon_test,
-                                  type="prob") # "class" or "prob"
+amazon_predictions_radial <- predict(radial_wf,
+                                   new_data=amazon_test,
+                                   type="prob") # "class" or "prob"
 
-amazon_predictions_knn <- predict(final_wf_knn,
-                                  new_data=amazon_test,
-                                  type="prob") # "class" or "prob"
+amazon_predictions_linear <- predict(linear_wf,
+                                   new_data=amazon_test,
+                                   type="prob") # "class" or "prob"
 
+
+#####
 ## Format predictions
-kaggle_predictions_log <- amazon_predictions_log %>% 
+#####
+kaggle_predictions_poly <- amazon_predictions_poly %>% 
   bind_cols(., amazon_test) %>% 
   select(id, .pred_1) %>% 
   rename(ACTION = .pred_1, 
          Id = id)
 
-kaggle_predictions_forest <- amazon_predictions_forest %>% 
+kaggle_predictions_radial <- amazon_predictions_radial %>% 
   bind_cols(., amazon_test) %>% 
   select(id, .pred_1) %>% 
   rename(ACTION = .pred_1, 
          Id = id)
 
-kaggle_predictions_knn <- amazon_predictions_knn %>% 
+kaggle_predictions_linear <- amazon_predictions_linear %>% 
   bind_cols(., amazon_test) %>% 
   select(id, .pred_1) %>% 
   rename(ACTION = .pred_1, 
          Id = id)
-  
-vroom_write(x = kaggle_predictions_log, file = "./logPredictionsPCA.csv", delim = ",")
-vroom_write(x = kaggle_predictions_forest, file = "./forestPredictionsPCA.csv", delim = ",")
-vroom_write(x = kaggle_predictions_knn, file = "./knnPredictionsPCA.csv", delim = ",")
-  
+
+vroom_write(x = kaggle_predictions_poly, file = "./logPredictionsSVMPoly.csv", delim = ",")
+vroom_write(x = kaggle_predictions_radial, file = "./logPredictionsSVMRad.csv", delim = ",")
+vroom_write(x = kaggle_predictions_linear, file = "./logPredictionsSVMLin.csv", delim = ",")
+
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
 #   filter(.metric=="roc_auc") %>% 
