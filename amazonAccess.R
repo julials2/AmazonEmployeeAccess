@@ -73,7 +73,7 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## logistic regression model
 #####
-logRegModel <- logistic_reg() %>% #Type of model
+logRegModel <- logistic_reg() %>% 
   set_engine("glm")
 
 #####
@@ -108,17 +108,18 @@ logRegModel <- logistic_reg() %>% #Type of model
 #####
 ## SVM models
 #####
-svm_Radial <- svm_rbf(rbf_sigma = 0.177, cost = 0.00316) %>%
-  set_mode("classification") %>%
-  set_engine("kernlab")
+# svm_Radial <- svm_rbf(rbf_sigma = 0.177, cost = 0.00316) %>%
+#   set_mode("classification") %>%
+#   set_engine("kernlab")
+# 
+# svm_Poly <- svm_poly(degree = 1, cost = 0.0131) %>%
+#   set_mode("classification") %>%
+#   set_engine("kernlab")
+# 
+# svm_Linear <- svm_linear(cost = 0.0131) %>%
+#   set_mode("classification") %>%
+#   set_engine("kernlab")
 
-svm_Poly <- svm_poly(degree = 1, cost = 0.0131) %>%
-  set_mode("classification") %>%
-  set_engine("kernlab")
-
-svm_Linear <- svm_linear(cost = 0.0131) %>%
-  set_mode("classification") %>%
-  set_engine("kernlab")
 
 ##########
 ## Put into a workflow here
@@ -126,10 +127,10 @@ svm_Linear <- svm_linear(cost = 0.0131) %>%
 #####
 ## logistic regression
 #####
-# log_reg_workflow <- workflow() %>%
-#   add_recipe(amazon_recipe) %>%
-#   add_model(logRegModel) %>%
-#   fit(data = amazon_train)
+log_reg_workflow <- workflow() %>%
+  add_recipe(amazon_recipe) %>%
+  add_model(logRegModel) %>%
+  fit(data = amazon_train)
 
 #####
 ## penalized logistic regression
@@ -162,20 +163,21 @@ svm_Linear <- svm_linear(cost = 0.0131) %>%
 #####
 ## SVM workflows
 #####
-poly_wf <- workflow() %>% 
-  add_model(svm_Poly) %>% 
-  add_recipe(amazon_recipe) %>% 
-  fit(data = amazon_train)
+# poly_wf <- workflow() %>% 
+#   add_model(svm_Poly) %>% 
+#   add_recipe(amazon_recipe) %>% 
+#   fit(data = amazon_train)
+# 
+# radial_wf <- workflow() %>%
+#   add_model(svm_Radial) %>%
+#   add_recipe(amazon_recipe) %>%
+#   fit(data = amazon_train)
+# 
+# linear_wf <- workflow() %>%
+#   add_model(svm_Linear) %>% 
+#   add_recipe(amazon_recipe) %>%
+#   fit(data = amazon_train)
 
-radial_wf <- workflow() %>%
-  add_model(svm_Radial) %>%
-  add_recipe(amazon_recipe) %>%
-  fit(data = amazon_train)
-
-linear_wf <- workflow() %>%
-  add_model(svm_Linear) %>% 
-  add_recipe(amazon_recipe) %>%
-  fit(data = amazon_train)
 
 ##########
 ## CV
@@ -242,6 +244,7 @@ linear_wf <- workflow() %>%
 # bestTune <- CV_results %>%
 #   select_best(metric="roc_auc")
 
+
 ##########
 ## Predictions
 ##########
@@ -256,43 +259,20 @@ linear_wf <- workflow() %>%
 #####
 ## Make predictions
 #####
-amazon_predictions_poly <- predict(poly_wf,
+amazon_predictions <- predict(log_reg_workflow,
                               new_data=amazon_test,
                               type="prob") # "class" or "prob"
-
-amazon_predictions_radial <- predict(radial_wf,
-                                   new_data=amazon_test,
-                                   type="prob") # "class" or "prob"
-
-amazon_predictions_linear <- predict(linear_wf,
-                                   new_data=amazon_test,
-                                   type="prob") # "class" or "prob"
-
 
 #####
 ## Format predictions
 #####
-kaggle_predictions_poly <- amazon_predictions_poly %>% 
+kaggle_predictions <- amazon_predictions %>% 
   bind_cols(., amazon_test) %>% 
   select(id, .pred_1) %>% 
   rename(ACTION = .pred_1, 
          Id = id)
 
-kaggle_predictions_radial <- amazon_predictions_radial %>% 
-  bind_cols(., amazon_test) %>% 
-  select(id, .pred_1) %>% 
-  rename(ACTION = .pred_1, 
-         Id = id)
-
-kaggle_predictions_linear <- amazon_predictions_linear %>% 
-  bind_cols(., amazon_test) %>% 
-  select(id, .pred_1) %>% 
-  rename(ACTION = .pred_1, 
-         Id = id)
-
-vroom_write(x = kaggle_predictions_poly, file = "./balancedSVMPoly.csv", delim = ",")
-vroom_write(x = kaggle_predictions_radial, file = "./balancedSVMRad.csv", delim = ",")
-vroom_write(x = kaggle_predictions_linear, file = "./balancedSVMLin.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./balancedLogReg.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
