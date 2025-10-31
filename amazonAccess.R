@@ -57,6 +57,7 @@ ggplot() +
 #####
 amazon_recipe <- recipe(ACTION ~ ., data = amazon_train) %>% 
   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
+  step_other(all_factor_predictors(), threshold = 0.001) %>% 
   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
   step_normalize(all_numeric_predictors()) %>%
   step_smote(all_outcomes(), neighbors = 5) %>% 
@@ -85,18 +86,18 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## random forest
 #####
-forest_mod <- rand_forest(mtry = tune(),
-                          min_n = tune(),
-                          trees = 500) %>%
-  set_engine("ranger") %>%
-  set_mode("classification")
+# forest_mod <- rand_forest(mtry = tune(),
+#                           min_n = tune(),
+#                           trees = 500) %>%
+#   set_engine("ranger") %>%
+#   set_mode("classification")
 
 #####
 ## knn model
 #####
-# knn_model <- nearest_neighbor(neighbors = tune()) %>%
-#   set_mode("classification") %>%
-#   set_engine("kknn")
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kknn")
 
 #####
 ## Naive bayes model
@@ -142,16 +143,16 @@ forest_mod <- rand_forest(mtry = tune(),
 #####
 ## random forest
 #####
-forest_workflow <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(forest_mod)
+# forest_workflow <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(forest_mod)
 
 #####
 ## knn 
 #####
-# knn_wf <- workflow() %>%
-#   add_recipe(amazon_recipe) %>%
-#   add_model(knn_model)
+knn_wf <- workflow() %>%
+  add_recipe(amazon_recipe) %>%
+  add_model(knn_model)
 
 #####
 ## Naive Bayes workflow
@@ -193,15 +194,15 @@ forest_workflow <- workflow() %>%
 #####
 ## Grid for forest
 #####
-tuning_grid <- grid_regular(mtry(range = c(1, 9)),
-                            min_n(),
-                            levels = 4)
+# tuning_grid <- grid_regular(mtry(range = c(1, 9)),
+#                             min_n(),
+#                             levels = 4)
 
 #####
 ## Grid for knn
 #####
-# tuning_grid_knn <- grid_regular(neighbors(),
-#                             levels = 5)
+tuning_grid <- grid_regular(neighbors(),
+                            levels = 5)
 
 #####
 ## Grid for naive bayes
@@ -233,7 +234,7 @@ folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 ## Run CV
 #####
 CV_results <- tune_grid(
-            forest_workflow,
+            knn_wf,
             resamples = folds,
             grid = tuning_grid,
             metrics = metric_set(roc_auc))
@@ -252,7 +253,7 @@ bestTune <- CV_results %>%
 #####
 ## Finalize workflow and fit it
 #####
-final_wf <- forest_workflow %>%
+final_wf <- knn_wf %>%
   finalize_workflow(bestTune) %>%
   fit(data = amazon_train)
 
@@ -272,7 +273,7 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
 
-vroom_write(x = kaggle_predictions, file = "./balancedForest.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./balancedKNN.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
