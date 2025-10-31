@@ -79,17 +79,17 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## penalized regression model
 #####
-penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
-  set_engine("glmnet")
+# penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
+#   set_engine("glmnet")
 
 #####
 ## random forest
 #####
-# forest_mod <- rand_forest(mtry = tune(),
-#                           min_n = tune(),
-#                           trees = 500) %>%
-#   set_engine("ranger") %>%
-#   set_mode("classification")
+forest_mod <- rand_forest(mtry = tune(),
+                          min_n = tune(),
+                          trees = 500) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
 
 #####
 ## knn model
@@ -135,16 +135,16 @@ penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
 #####
 ## penalized logistic regression
 #####
-pen_workflow <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(penLogModel)
+# pen_workflow <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(penLogModel)
 
 #####
 ## random forest
 #####
-# forest_workflow <- workflow() %>%
-#   add_recipe(amazon_recipe) %>%
-#   add_model(forest_mod)
+forest_workflow <- workflow() %>%
+  add_recipe(amazon_recipe) %>%
+  add_model(forest_mod)
 
 #####
 ## knn 
@@ -186,16 +186,16 @@ pen_workflow <- workflow() %>%
 #####
 ## Grid of values to tune over
 #####
-tuning_grid <- grid_regular(penalty(),
-                            mixture(),
-                            levels = 4)
+# tuning_grid <- grid_regular(penalty(),
+#                             mixture(),
+#                             levels = 4)
 
 #####
 ## Grid for forest
 #####
-# tuning_grid_forest <- grid_regular(mtry(range = c(1, 9)),
-#                             min_n(),
-#                             levels = 4)
+tuning_grid <- grid_regular(mtry(range = c(1, 9)),
+                            min_n(),
+                            levels = 4)
 
 #####
 ## Grid for knn
@@ -233,7 +233,7 @@ folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 ## Run CV
 #####
 CV_results <- tune_grid(
-            pen_workflow,
+            forest_workflow,
             resamples = folds,
             grid = tuning_grid,
             metrics = metric_set(roc_auc))
@@ -252,7 +252,7 @@ bestTune <- CV_results %>%
 #####
 ## Finalize workflow and fit it
 #####
-final_wf <- pen_workflow %>%
+final_wf <- forest_workflow %>%
   finalize_workflow(bestTune) %>%
   fit(data = amazon_train)
 
@@ -272,7 +272,7 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
 
-vroom_write(x = kaggle_predictions, file = "./balancedPenalized.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./balancedForest.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
