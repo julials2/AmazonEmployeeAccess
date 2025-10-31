@@ -95,16 +95,16 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## knn model
 #####
-knn_model <- nearest_neighbor(neighbors = tune()) %>%
-  set_mode("classification") %>%
-  set_engine("kknn")
+# knn_model <- nearest_neighbor(neighbors = tune()) %>%
+#   set_mode("classification") %>%
+#   set_engine("kknn")
 
 #####
 ## Naive bayes model
 #####
-# nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
-#   set_mode("classification") %>%
-#   set_engine("naivebayes")
+nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("naivebayes")
 
 #####
 ## SVM models
@@ -150,16 +150,16 @@ knn_model <- nearest_neighbor(neighbors = tune()) %>%
 #####
 ## knn 
 #####
-knn_wf <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(knn_model)
+# knn_wf <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(knn_model)
 
 #####
 ## Naive Bayes workflow
 #####
-# nb_wf <- workflow() %>%
-#   add_recipe(amazon_recipe) %>%
-#   add_model(nb_model)
+nb_wf <- workflow() %>%
+  add_recipe(amazon_recipe) %>%
+  add_model(nb_model)
 
 #####
 ## SVM workflows
@@ -234,7 +234,7 @@ folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 ## Run CV
 #####
 CV_results <- tune_grid(
-            knn_wf,
+            nb_wf,
             resamples = folds,
             grid = tuning_grid,
             metrics = metric_set(roc_auc))
@@ -253,7 +253,7 @@ bestTune <- CV_results %>%
 #####
 ## Finalize workflow and fit it
 #####
-final_wf <- knn_wf %>%
+final_wf <- nb_wf %>%
   finalize_workflow(bestTune) %>%
   fit(data = amazon_train)
 
@@ -273,7 +273,7 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
 
-vroom_write(x = kaggle_predictions, file = "./balancedKNN.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./balancedNB.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
