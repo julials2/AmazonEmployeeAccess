@@ -73,14 +73,14 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## logistic regression model
 #####
-logRegModel <- logistic_reg() %>% 
-  set_engine("glm")
+# logRegModel <- logistic_reg() %>% 
+#   set_engine("glm")
 
 #####
 ## penalized regression model
 #####
-# penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
-#   set_engine("glmnet")
+penLogModel <- logistic_reg(mixture = tune(), penalty = tune()) %>%
+  set_engine("glmnet")
 
 #####
 ## random forest
@@ -127,17 +127,17 @@ logRegModel <- logistic_reg() %>%
 #####
 ## logistic regression
 #####
-log_reg_workflow <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(logRegModel) %>%
-  fit(data = amazon_train)
+# log_reg_workflow <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(logRegModel) %>%
+#   fit(data = amazon_train)
 
 #####
 ## penalized logistic regression
 #####
-# pen_workflow <- workflow() %>%
-#   add_recipe(amazon_recipe) %>%
-#   add_model(penLogModel)
+pen_workflow <- workflow() %>%
+  add_recipe(amazon_recipe) %>%
+  add_model(penLogModel)
 
 #####
 ## random forest
@@ -186,9 +186,9 @@ log_reg_workflow <- workflow() %>%
 #####
 ## Grid of values to tune over
 #####
-# tuning_grid_pen <- grid_regular(penalty(),
-#                             mixture(),
-#                             levels = 4)
+tuning_grid <- grid_regular(penalty(),
+                            mixture(),
+                            levels = 4)
 
 #####
 ## Grid for forest
@@ -227,22 +227,22 @@ log_reg_workflow <- workflow() %>%
 #####
 ## Split data for CV
 #####
-# folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
+folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 
 #####
 ## Run CV
 #####
-# CV_results <- tune_grid(
-#             pen_workflow,
-#             resamples = folds,
-#             grid = tuning_grid_pen,
-#             metrics = metric_set(roc_auc))
+CV_results <- tune_grid(
+            pen_workflow,
+            resamples = folds,
+            grid = tuning_grid,
+            metrics = metric_set(roc_auc))
 
 #####
 ## Find best tuning parameters
 #####
-# bestTune <- CV_results %>%
-#   select_best(metric="roc_auc")
+bestTune <- CV_results %>%
+  select_best(metric="roc_auc")
 
 
 ##########
@@ -252,14 +252,14 @@ log_reg_workflow <- workflow() %>%
 #####
 ## Finalize workflow and fit it
 #####
-# final_wf <- reg_workflow %>%
-#   finalize_workflow(bestTune_poly) %>%
-#   fit(data = amazon_train)
+final_wf <- pen_workflow %>%
+  finalize_workflow(bestTune) %>%
+  fit(data = amazon_train)
 
 #####
 ## Make predictions
 #####
-amazon_predictions <- predict(log_reg_workflow,
+amazon_predictions <- predict(final_wf,
                               new_data=amazon_test,
                               type="prob") # "class" or "prob"
 
@@ -272,7 +272,7 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
 
-vroom_write(x = kaggle_predictions, file = "./balancedLogReg.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./balancedPenalized.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
