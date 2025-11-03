@@ -3,7 +3,6 @@ library(tidymodels)
 library(embed)
 library(ggmosaic)
 library(vroom)
-library(themis) #up and down sampling
 
 amazon_train <- vroom("train.csv") %>% 
   mutate(ACTION = factor(ACTION))
@@ -57,16 +56,11 @@ ggplot() +
 #####
 amazon_recipe <- recipe(ACTION ~ ., data = amazon_train) %>% 
   step_mutate_at(all_numeric_predictors(), fn = factor) %>%
-  step_other(all_factor_predictors(), threshold = 0.001) %>% 
   step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION)) %>%
-  step_normalize(all_numeric_predictors()) %>%
-  step_smote(all_outcomes(), neighbors = 5) %>% 
-  step_upsample(all_outcomes()) %>% 
-  step_downsample(all_outcomes())
-  
+  step_normalize(all_numeric_predictors())
+
 prep <- prep(amazon_recipe)
 baked <- bake(prep, new_data = amazon_train)
-
 ##########
 ## Models
 ##########
@@ -86,11 +80,11 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## random forest
 #####
-# forest_mod <- rand_forest(mtry = tune(),
-#                           min_n = tune(),
-#                           trees = 500) %>%
-#   set_engine("ranger") %>%
-#   set_mode("classification")
+forest_mod <- rand_forest(mtry = tune(),
+                          min_n = tune(),
+                          trees = 100) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
 
 #####
 ## knn model
@@ -102,9 +96,9 @@ baked <- bake(prep, new_data = amazon_train)
 #####
 ## Naive bayes model
 #####
-nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
-  set_mode("classification") %>%
-  set_engine("naivebayes")
+# nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
+#   set_mode("classification") %>%
+#   set_engine("naivebayes")
 
 #####
 ## SVM models
@@ -122,9 +116,11 @@ nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
 #   set_engine("kernlab")
 
 
+
 ##########
 ## Put into a workflow here
 ##########
+
 #####
 ## logistic regression
 #####
@@ -143,9 +139,9 @@ nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
 #####
 ## random forest
 #####
-# forest_workflow <- workflow() %>%
-#   add_recipe(amazon_recipe) %>%
-#   add_model(forest_mod)
+forest_workflow <- workflow() %>%
+  add_recipe(amazon_recipe) %>%
+  add_model(forest_mod)
 
 #####
 ## knn 
@@ -157,9 +153,9 @@ nb_model <- naive_Bayes(Laplace = tune(), smoothness = tune()) %>%
 #####
 ## Naive Bayes workflow
 #####
-nb_wf <- workflow() %>%
-  add_recipe(amazon_recipe) %>%
-  add_model(nb_model)
+# nb_wf <- workflow() %>%
+#   add_recipe(amazon_recipe) %>%
+#   add_model(nb_model)
 
 #####
 ## SVM workflows
@@ -194,20 +190,20 @@ nb_wf <- workflow() %>%
 #####
 ## Grid for forest
 #####
-# tuning_grid <- grid_regular(mtry(range = c(1, 9)),
-#                             min_n(),
-#                             levels = 4)
+tuning_grid <- grid_regular(mtry(range = c(1, 9)),
+                            min_n(), 
+                            levels = 5)
 
 #####
 ## Grid for knn
 #####
-tuning_grid <- grid_regular(neighbors(),
-                            levels = 5)
+# tuning_grid <- grid_regular(neighbors(),
+#                             levels = 5)
 
 #####
 ## Grid for naive bayes
 #####
-# tuning_grid_bayes <- grid_regular(Laplace(),
+# tuning_grid <- grid_regular(Laplace(),
 #                             smoothness(),
 #                             levels = 4)
 
@@ -234,10 +230,10 @@ folds <- vfold_cv(amazon_train, v = 5, repeats = 1)
 ## Run CV
 #####
 CV_results <- tune_grid(
-            nb_wf,
-            resamples = folds,
-            grid = tuning_grid,
-            metrics = metric_set(roc_auc))
+    forest_workflow,
+    resamples = folds,
+    grid = tuning_grid,
+    metrics = metric_set(roc_auc))
 
 #####
 ## Find best tuning parameters
@@ -253,7 +249,7 @@ bestTune <- CV_results %>%
 #####
 ## Finalize workflow and fit it
 #####
-final_wf <- nb_wf %>%
+final_wf <- forest_workflow %>%
   finalize_workflow(bestTune) %>%
   fit(data = amazon_train)
 
@@ -273,7 +269,7 @@ kaggle_predictions <- amazon_predictions %>%
   rename(ACTION = .pred_1, 
          Id = id)
 
-vroom_write(x = kaggle_predictions, file = "./balancedNB.csv", delim = ",")
+vroom_write(x = kaggle_predictions, file = "./RandomForest.csv", delim = ",")
 
 ## Create tuning graphic
 # CV_results %>% collect_metrics() %>% 
